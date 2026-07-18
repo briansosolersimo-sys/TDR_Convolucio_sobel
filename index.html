@@ -2,52 +2,83 @@
 <html lang="ca">
 <head>
 <meta charset="UTF-8">
-<title>Simulador de convolució - Filtre Sobel</title>
+<title>Simulador de convolucio RGB - Filtre Sobel</title>
 <style>
   body {
     font-family: -apple-system, "Segoe UI", Arial, sans-serif;
     background: #ffffff;
     color: #1a1a1a;
     padding: 2rem;
-    max-width: 900px;
+    max-width: 1100px;
     margin: 0 auto;
   }
-  h1 { font-size: 20px; font-weight: 500; margin-bottom: 1.5rem; }
-  .label { font-size: 13px; color: #555; margin: 0 0 8px; }
-  .row { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-start; }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 0.3rem; }
+  p.sub { font-size: 13px; color: #666; margin: 0 0 1.5rem; }
+  .label { font-size: 13px; color: #555; margin: 0 0 6px; font-weight: 600; }
+  .channels-row { display: flex; gap: 1.2rem; margin-bottom: 1.5rem; }
+  .channel-block { text-align: center; }
+  .channel-title { font-size: 12px; margin-bottom: 4px; font-weight: 600; }
   .cell {
     display: flex; align-items: center; justify-content: center;
-    font-size: 11px; border-radius: 4px; border: 1px solid #ddd;
-    width: 36px; height: 36px;
+    font-size: 10px; border-radius: 3px; border: 1px solid #ddd;
+    width: 30px; height: 30px;
   }
-  #calcText { font-size: 13px; margin-top: 12px; color: #444; min-height: 50px; line-height:1.5; }
-  button {
+  .row-main { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-start; }
+  #calcText { font-size: 13px; margin-top: 12px; color: #444; min-height: 90px; line-height:1.6; }
+  button, select {
     font-size: 14px; padding: 8px 14px; border-radius: 6px;
     border: 1px solid #bbb; background: #fff; cursor: pointer; margin-right: 8px;
   }
   button:hover { background: #f2f2f2; }
+  .r-val { color: #b91c1c; }
+  .g-val { color: #15803d; }
+  .b-val { color: #1d4ed8; }
 </style>
 </head>
 <body>
 
-<h1>Simulador interactiu: convolucio amb el filtre Sobel (Sx)</h1>
+<h1>Simulador interactiu: convolucio sobre una imatge RGB</h1>
+<p class="sub">El filtre s'aplica per separat a cada canal (R, G, B); els tres resultats parcials se sumen per formar el valor final del feature map.</p>
 
-<div class="row">
+<div style="margin-bottom:1.2rem;">
+  <label for="filterSelect" style="font-size:13px; margin-right:8px;">Filtre:</label>
+  <select id="filterSelect">
+    <option value="Sx">Sx (vores verticals)</option>
+    <option value="Sy">Sy (vores horitzontals)</option>
+  </select>
+</div>
+
+<div class="row-main">
+
   <div>
-    <p class="label">Imatge d'entrada (8x8)</p>
-    <div id="inputGrid" style="display:grid; grid-template-columns:repeat(8,36px); grid-template-rows:repeat(8,36px); gap:2px;"></div>
+    <p class="label">Imatge d'entrada (3 canals, 8x8)</p>
+    <div class="channels-row">
+      <div class="channel-block">
+        <div class="channel-title r-val">Canal R</div>
+        <div id="gridR" style="display:grid; grid-template-columns:repeat(8,30px); grid-template-rows:repeat(8,30px); gap:2px;"></div>
+      </div>
+      <div class="channel-block">
+        <div class="channel-title g-val">Canal G</div>
+        <div id="gridG" style="display:grid; grid-template-columns:repeat(8,30px); grid-template-rows:repeat(8,30px); gap:2px;"></div>
+      </div>
+      <div class="channel-block">
+        <div class="channel-title b-val">Canal B</div>
+        <div id="gridB" style="display:grid; grid-template-columns:repeat(8,30px); grid-template-rows:repeat(8,30px); gap:2px;"></div>
+      </div>
+    </div>
   </div>
 
   <div>
-    <p class="label">Filtre Sx (fix)</p>
-    <div id="filterGrid" style="display:grid; grid-template-columns:repeat(3,36px); grid-template-rows:repeat(3,36px); gap:2px;"></div>
+    <p class="label">Filtre aplicat (fix per canal)</p>
+    <div id="filterGrid" style="display:grid; grid-template-columns:repeat(3,34px); grid-template-rows:repeat(3,34px); gap:2px;"></div>
     <p id="calcText">Prem "Pas" per comencar</p>
   </div>
 
   <div>
     <p class="label">Feature map de sortida (6x6)</p>
-    <div id="outputGrid" style="display:grid; grid-template-columns:repeat(6,36px); grid-template-rows:repeat(6,36px); gap:2px;"></div>
+    <div id="outputGrid" style="display:grid; grid-template-columns:repeat(6,34px); grid-template-rows:repeat(6,34px); gap:2px;"></div>
   </div>
+
 </div>
 
 <div style="margin-top:1.5rem;">
@@ -58,50 +89,75 @@
 
 <script>
 const N = 8, F = 3, OUT = N - F + 1;
-const input = [];
-for (let r = 0; r < N; r++) {
-  const row = [];
-  for (let c = 0; c < N; c++) row.push(c < 4 ? 10 : 0);
-  input.push(row);
-}
-const Sx = [[1,0,-1],[2,0,-2],[1,0,-1]];
 
-const inputGrid = document.getElementById('inputGrid');
-const filterGrid = document.getElementById('filterGrid');
+function buildChannel(maxVal) {
+  const g = [];
+  for (let r = 0; r < N; r++) {
+    const row = [];
+    for (let c = 0; c < N; c++) row.push(c < 4 ? maxVal : 0);
+    g.push(row);
+  }
+  return g;
+}
+const inputR = buildChannel(10);
+const inputG = buildChannel(8);
+const inputB = buildChannel(6);
+
+const FILTERS = {
+  Sx: [[1,0,-1],[2,0,-2],[1,0,-1]],
+  Sy: [[1,2,1],[0,0,0],[-1,-2,-1]]
+};
+let currentFilter = 'Sx';
+
+const gridEls = { R: document.getElementById('gridR'), G: document.getElementById('gridG'), B: document.getElementById('gridB') };
+const filterGridEl = document.getElementById('filterGrid');
 const outputGrid = document.getElementById('outputGrid');
 const calcText = document.getElementById('calcText');
+const filterSelect = document.getElementById('filterSelect');
 
-function valColor(v, max) {
+function valColor(v, max, tint) {
   const t = Math.min(Math.abs(v) / max, 1);
-  const light = [230,241,251], dark = [4,44,83];
+  const light = [235,235,235];
+  const dark = tint === 'R' ? [140,20,20] : tint === 'G' ? [20,110,40] : tint === 'B' ? [20,40,140] : [4,44,83];
   const rgb = light.map((l,i) => Math.round(l + (dark[i]-l)*t));
   return 'rgb(' + rgb.join(',') + ')';
 }
 
-const inputCells = [];
-for (let r = 0; r < N; r++) {
-  inputCells.push([]);
-  for (let c = 0; c < N; c++) {
-    const d = document.createElement('div');
-    d.className = 'cell';
-    d.style.background = valColor(input[r][c], 10);
-    d.style.color = input[r][c] > 5 ? '#fff' : '#1a1a1a';
-    d.textContent = input[r][c];
-    inputGrid.appendChild(d);
-    inputCells[r].push(d);
+const cellsR = [], cellsG = [], cellsB = [];
+function buildGrid(container, data, arr, tint) {
+  for (let r = 0; r < N; r++) {
+    arr.push([]);
+    for (let c = 0; c < N; c++) {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      d.style.background = valColor(data[r][c], 10, tint);
+      d.style.color = data[r][c] > 5 ? '#fff' : '#1a1a1a';
+      d.textContent = data[r][c];
+      container.appendChild(d);
+      arr[r].push(d);
+    }
   }
 }
+buildGrid(gridEls.R, inputR, cellsR, 'R');
+buildGrid(gridEls.G, inputG, cellsG, 'G');
+buildGrid(gridEls.B, inputB, cellsB, 'B');
 
-for (let r = 0; r < F; r++) {
-  for (let c = 0; c < F; c++) {
-    const d = document.createElement('div');
-    d.className = 'cell';
-    d.style.background = '#f4f4f4';
-    d.style.fontWeight = '600';
-    d.textContent = Sx[r][c];
-    filterGrid.appendChild(d);
+function renderFilter() {
+  filterGridEl.innerHTML = '';
+  const f = FILTERS[currentFilter];
+  for (let r = 0; r < F; r++) {
+    for (let c = 0; c < F; c++) {
+      const d = document.createElement('div');
+      d.className = 'cell';
+      d.style.background = '#f4f4f4';
+      d.style.fontWeight = '600';
+      d.style.width = '34px'; d.style.height = '34px';
+      d.textContent = f[r][c];
+      filterGridEl.appendChild(d);
+    }
   }
 }
+renderFilter();
 
 const outputCells = [];
 for (let r = 0; r < OUT; r++) {
@@ -110,6 +166,7 @@ for (let r = 0; r < OUT; r++) {
     const d = document.createElement('div');
     d.className = 'cell';
     d.style.background = '#f4f4f4';
+    d.style.width = '34px'; d.style.height = '34px';
     d.style.fontSize = '10px';
     outputGrid.appendChild(d);
     outputCells[r].push(d);
@@ -121,30 +178,48 @@ let playing = false;
 let playTimer = null;
 
 function clearHighlight() {
-  for (let r = 0; r < N; r++)
-    for (let c = 0; c < N; c++)
-      inputCells[r][c].style.boxShadow = 'none';
+  [cellsR, cellsG, cellsB].forEach(arr => {
+    for (let r = 0; r < N; r++)
+      for (let c = 0; c < N; c++)
+        arr[r][c].style.boxShadow = 'none';
+  });
+}
+
+function computeChannel(data, or_, oc, filt) {
+  let sum = 0;
+  for (let i = 0; i < F; i++)
+    for (let j = 0; j < F; j++)
+      sum += data[or_+i][oc+j] * filt[i][j];
+  return sum;
 }
 
 function step() {
   if (pos >= OUT * OUT) return;
   const or_ = Math.floor(pos / OUT), oc = pos % OUT;
   clearHighlight();
-  let sum = 0;
-  let terms = [];
-  for (let i = 0; i < F; i++) {
-    for (let j = 0; j < F; j++) {
-      const v = input[or_+i][oc+j];
-      const f = Sx[i][j];
-      sum += v * f;
-      inputCells[or_+i][oc+j].style.boxShadow = 'inset 0 0 0 2px #1a56db';
-      terms.push('(' + f + '\u00d7' + v + ')');
-    }
-  }
-  outputCells[or_][oc].style.background = valColor(sum, 40);
-  outputCells[or_][oc].style.color = Math.abs(sum) > 20 ? '#fff' : '#1a1a1a';
-  outputCells[or_][oc].textContent = sum;
-  calcText.innerHTML = 'Posicio (' + (or_+1) + ',' + (oc+1) + ')<br>' + terms.join(' + ') + ' = <b>' + sum + '</b>';
+  const filt = FILTERS[currentFilter];
+
+  const sR = computeChannel(inputR, or_, oc, filt);
+  const sG = computeChannel(inputG, or_, oc, filt);
+  const sB = computeChannel(inputB, or_, oc, filt);
+  const total = sR + sG + sB;
+
+  [[cellsR], [cellsG], [cellsB]].forEach(([arr]) => {
+    for (let i = 0; i < F; i++)
+      for (let j = 0; j < F; j++)
+        arr[or_+i][oc+j].style.boxShadow = 'inset 0 0 0 2px #1a56db';
+  });
+
+  outputCells[or_][oc].style.background = valColor(total, 100, null);
+  outputCells[or_][oc].style.color = Math.abs(total) > 50 ? '#fff' : '#1a1a1a';
+  outputCells[or_][oc].textContent = total;
+
+  calcText.innerHTML =
+    'Posicio (' + (or_+1) + ',' + (oc+1) + ') amb filtre ' + currentFilter + '<br>' +
+    '<span class="r-val">R: ' + sR + '</span> + ' +
+    '<span class="g-val">G: ' + sG + '</span> + ' +
+    '<span class="b-val">B: ' + sB + '</span> = <b>' + total + '</b>';
+
   pos++;
   if (pos >= OUT * OUT) {
     calcText.innerHTML += '<br><br>Feature map complet.';
@@ -157,13 +232,7 @@ function stopPlay() {
   clearInterval(playTimer);
 }
 
-document.getElementById('stepBtn').addEventListener('click', () => { stopPlay(); step(); });
-document.getElementById('playBtn').addEventListener('click', () => {
-  if (playing) { stopPlay(); return; }
-  playing = true;
-  playTimer = setInterval(() => { if (pos >= OUT*OUT) stopPlay(); else step(); }, 350);
-});
-document.getElementById('resetBtn').addEventListener('click', () => {
+function resetAll() {
   stopPlay();
   pos = 0;
   clearHighlight();
@@ -173,6 +242,19 @@ document.getElementById('resetBtn').addEventListener('click', () => {
       outputCells[r][c].textContent = '';
     }
   calcText.textContent = 'Prem "Pas" per comencar';
+}
+
+document.getElementById('stepBtn').addEventListener('click', () => { stopPlay(); step(); });
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  playTimer = setInterval(() => { if (pos >= OUT*OUT) stopPlay(); else step(); }, 450);
+});
+document.getElementById('resetBtn').addEventListener('click', resetAll);
+filterSelect.addEventListener('change', (e) => {
+  currentFilter = e.target.value;
+  renderFilter();
+  resetAll();
 });
 </script>
 
