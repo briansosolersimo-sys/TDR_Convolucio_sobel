@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<title>Simulador de convolució - Filtre Sobel</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Arial, sans-serif;
+    background: #ffffff;
+    color: #1a1a1a;
+    padding: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 20px; font-weight: 500; margin-bottom: 1.5rem; }
+  .label { font-size: 13px; color: #555; margin: 0 0 8px; }
+  .row { display: flex; gap: 2.5rem; flex-wrap: wrap; align-items: flex-start; }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; border-radius: 4px; border: 1px solid #ddd;
+    width: 36px; height: 36px;
+  }
+  #calcText { font-size: 13px; margin-top: 12px; color: #444; min-height: 50px; line-height:1.5; }
+  button {
+    font-size: 14px; padding: 8px 14px; border-radius: 6px;
+    border: 1px solid #bbb; background: #fff; cursor: pointer; margin-right: 8px;
+  }
+  button:hover { background: #f2f2f2; }
+</style>
+</head>
+<body>
+
+<h1>Simulador interactiu: convolucio amb el filtre Sobel (Sx)</h1>
+
+<div class="row">
+  <div>
+    <p class="label">Imatge d'entrada (8x8)</p>
+    <div id="inputGrid" style="display:grid; grid-template-columns:repeat(8,36px); grid-template-rows:repeat(8,36px); gap:2px;"></div>
+  </div>
+
+  <div>
+    <p class="label">Filtre Sx (fix)</p>
+    <div id="filterGrid" style="display:grid; grid-template-columns:repeat(3,36px); grid-template-rows:repeat(3,36px); gap:2px;"></div>
+    <p id="calcText">Prem "Pas" per comencar</p>
+  </div>
+
+  <div>
+    <p class="label">Feature map de sortida (6x6)</p>
+    <div id="outputGrid" style="display:grid; grid-template-columns:repeat(6,36px); grid-template-rows:repeat(6,36px); gap:2px;"></div>
+  </div>
+</div>
+
+<div style="margin-top:1.5rem;">
+  <button id="stepBtn">Pas</button>
+  <button id="playBtn">Reproduir tot</button>
+  <button id="resetBtn">Reiniciar</button>
+</div>
+
+<script>
+const N = 8, F = 3, OUT = N - F + 1;
+const input = [];
+for (let r = 0; r < N; r++) {
+  const row = [];
+  for (let c = 0; c < N; c++) row.push(c < 4 ? 10 : 0);
+  input.push(row);
+}
+const Sx = [[1,0,-1],[2,0,-2],[1,0,-1]];
+
+const inputGrid = document.getElementById('inputGrid');
+const filterGrid = document.getElementById('filterGrid');
+const outputGrid = document.getElementById('outputGrid');
+const calcText = document.getElementById('calcText');
+
+function valColor(v, max) {
+  const t = Math.min(Math.abs(v) / max, 1);
+  const light = [230,241,251], dark = [4,44,83];
+  const rgb = light.map((l,i) => Math.round(l + (dark[i]-l)*t));
+  return 'rgb(' + rgb.join(',') + ')';
+}
+
+const inputCells = [];
+for (let r = 0; r < N; r++) {
+  inputCells.push([]);
+  for (let c = 0; c < N; c++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.style.background = valColor(input[r][c], 10);
+    d.style.color = input[r][c] > 5 ? '#fff' : '#1a1a1a';
+    d.textContent = input[r][c];
+    inputGrid.appendChild(d);
+    inputCells[r].push(d);
+  }
+}
+
+for (let r = 0; r < F; r++) {
+  for (let c = 0; c < F; c++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.style.background = '#f4f4f4';
+    d.style.fontWeight = '600';
+    d.textContent = Sx[r][c];
+    filterGrid.appendChild(d);
+  }
+}
+
+const outputCells = [];
+for (let r = 0; r < OUT; r++) {
+  outputCells.push([]);
+  for (let c = 0; c < OUT; c++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    d.style.background = '#f4f4f4';
+    d.style.fontSize = '10px';
+    outputGrid.appendChild(d);
+    outputCells[r].push(d);
+  }
+}
+
+let pos = 0;
+let playing = false;
+let playTimer = null;
+
+function clearHighlight() {
+  for (let r = 0; r < N; r++)
+    for (let c = 0; c < N; c++)
+      inputCells[r][c].style.boxShadow = 'none';
+}
+
+function step() {
+  if (pos >= OUT * OUT) return;
+  const or_ = Math.floor(pos / OUT), oc = pos % OUT;
+  clearHighlight();
+  let sum = 0;
+  let terms = [];
+  for (let i = 0; i < F; i++) {
+    for (let j = 0; j < F; j++) {
+      const v = input[or_+i][oc+j];
+      const f = Sx[i][j];
+      sum += v * f;
+      inputCells[or_+i][oc+j].style.boxShadow = 'inset 0 0 0 2px #1a56db';
+      terms.push('(' + f + '\u00d7' + v + ')');
+    }
+  }
+  outputCells[or_][oc].style.background = valColor(sum, 40);
+  outputCells[or_][oc].style.color = Math.abs(sum) > 20 ? '#fff' : '#1a1a1a';
+  outputCells[or_][oc].textContent = sum;
+  calcText.innerHTML = 'Posicio (' + (or_+1) + ',' + (oc+1) + ')<br>' + terms.join(' + ') + ' = <b>' + sum + '</b>';
+  pos++;
+  if (pos >= OUT * OUT) {
+    calcText.innerHTML += '<br><br>Feature map complet.';
+    stopPlay();
+  }
+}
+
+function stopPlay() {
+  playing = false;
+  clearInterval(playTimer);
+}
+
+document.getElementById('stepBtn').addEventListener('click', () => { stopPlay(); step(); });
+document.getElementById('playBtn').addEventListener('click', () => {
+  if (playing) { stopPlay(); return; }
+  playing = true;
+  playTimer = setInterval(() => { if (pos >= OUT*OUT) stopPlay(); else step(); }, 350);
+});
+document.getElementById('resetBtn').addEventListener('click', () => {
+  stopPlay();
+  pos = 0;
+  clearHighlight();
+  for (let r = 0; r < OUT; r++)
+    for (let c = 0; c < OUT; c++) {
+      outputCells[r][c].style.background = '#f4f4f4';
+      outputCells[r][c].textContent = '';
+    }
+  calcText.textContent = 'Prem "Pas" per comencar';
+});
+</script>
+
+</body>
+</html>
